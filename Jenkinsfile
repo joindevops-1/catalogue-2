@@ -51,6 +51,19 @@ pipeline {
                     }
                 }
             }
+        }
+        stage('Sonar Scan') {
+            environment {
+                scannerHome = tool 'sonar-8.0'
+            }
+            steps {
+                script {
+                   // Sonar Server envrionment
+                   withSonarQubeEnv(installationName: 'sonar-server') {
+                         sh "${scannerHome}/bin/sonar-scanner"
+                   }
+                }
+            }
         }    
     }
     post{
