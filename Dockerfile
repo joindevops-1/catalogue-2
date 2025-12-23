@@ -6,7 +6,7 @@ RUN npm install
 
 FROM node:22-alpine3.22
 RUN apk update && apk upgrade --no-cache \
-RUN addgroup -S roboshop && adduser -S roboshop -G roboshop
+    && addgroup -S roboshop && adduser -S roboshop -G roboshop
 ENV MONGO="true" \
     MONGO_URL="mongodb://mongodb:27017/catalogue"
 WORKDIR /opt/server
