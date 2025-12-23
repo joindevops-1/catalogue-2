@@ -57,19 +57,17 @@ pipeline {
     script {
       withAWS(credentials: 'aws-creds', region: 'us-east-1') {
 
-        // NOTE:
-        // - ECR scan-on-push is enabled, so we only WAIT + READ findings
-        // - Handles multi-arch pushes (Image Index) by scanning child image digests
+        def repo   = "${PROJECT}/${COMPONENT}"
+        def reg    = "${REGION}"
+        def tag    = "${appVersion}"
 
-        def repo = "${PROJECT}/${COMPONENT}"
-
-        // 1) Resolve the digest for the tag (often an Image Index)
+        // 1) Resolve the digest for the pushed tag
         def indexDigest = sh(
           script: """
             aws ecr describe-images \
               --repository-name ${repo} \
-              --image-ids imageTag=${appVersion} \
-              --region ${REGION} \
+              --image-ids imageTag=${tag} \
+              --region ${reg} \
               --query 'imageDetails[0].imageDigest' \
               --output text
           """,
@@ -77,17 +75,18 @@ pipeline {
         ).trim()
 
         if (!indexDigest || indexDigest == "None") {
-          error("Could not resolve digest for ${repo}:${appVersion}")
+          error("Could not resolve digest for ${repo}:${tag}")
         }
+        echo "Tag ${repo}:${tag} points to digest: ${indexDigest}"
 
-        // 2) If it's an Image Index, extract child digests; otherwise scan the single digest
-        def childDigestsText = sh(
+        // 2) If this tag is a multi-arch Image Index, extract child image digests; otherwise use indexDigest
+        def childDigests = sh(
           script: """
             aws ecr batch-get-image \
               --repository-name ${repo} \
-              --image-ids imageTag=${appVersion} \
+              --image-ids imageTag=${tag} \
               --accepted-media-types application/vnd.oci.image.index.v1+json application/vnd.docker.distribution.manifest.list.v2+json \
-              --region ${REGION} \
+              --region ${reg} \
               --query 'images[0].imageManifest' \
               --output text | jq -r '.manifests[].digest' 2>/dev/null || true
           """,
@@ -95,32 +94,34 @@ pipeline {
         ).trim()
 
         def digestsToCheck = []
-        if (childDigestsText) {
-          digestsToCheck = childDigestsText.split("\\r?\\n").findAll { it?.trim() }
-          echo "Multi-arch Image Index detected for ${repo}:${appVersion}. Child digests: ${digestsToCheck}"
+        if (childDigests) {
+          digestsToCheck = childDigests.split("\\r?\\n").findAll { it?.trim() }
+          echo "Multi-arch Image Index detected. Child digests: ${digestsToCheck}"
         } else {
           digestsToCheck = [indexDigest]
-          echo "Single image detected for ${repo}:${appVersion}. Digest: ${indexDigest}"
+          echo "Single image detected. Digest: ${indexDigest}"
         }
 
-        // 3) Wait for scan results and gate on HIGH/CRITICAL
+        // 3) For each digest, wait until scan is COMPLETE, then gate on HIGH/CRITICAL
         def totalHighCritical = 0
         def offenders = []
 
         digestsToCheck.each { d ->
-          echo "Checking scan status for ${repo}@${d}"
+          echo "Waiting for scan completion: ${repo}@${d}"
 
-          // Wait up to 10 minutes for scan to complete (scan-on-push can take time)
+          // Wait up to 10 minutes (scan-on-push can take time)
           def status = "IN_PROGRESS"
           for (int i = 0; i < 120; i++) {
+            // NOTE: For some ECR setups, describe-images may return None;
+            // we still proceed by trying describe-image-scan-findings.
             status = sh(
               script: """
-                aws ecr describe-images \
+                aws ecr describe-image-scan-findings \
                   --repository-name ${repo} \
-                  --image-ids imageDigest=${d} \
-                  --region ${REGION} \
-                  --query 'imageDetails[0].imageScanStatus.status' \
-                  --output text
+                  --image-id imageDigest=${d} \
+                  --region ${reg} \
+                  --query 'imageScanStatus.status' \
+                  --output text 2>/dev/null || echo IN_PROGRESS
               """,
               returnStdout: true
             ).trim()
@@ -130,16 +131,16 @@ pipeline {
           }
 
           if (status != "COMPLETE") {
-            error("ECR scan not complete for ${repo}@${d}. status=${status}")
+            error("ECR scan not COMPLETE for ${repo}@${d}. status=${status}")
           }
 
-          // Fast gate via severity counts
+          // Fetch severity counts
           def countsJsonText = sh(
             script: """
               aws ecr describe-image-scan-findings \
                 --repository-name ${repo} \
                 --image-id imageDigest=${d} \
-                --region ${REGION} \
+                --region ${reg} \
                 --query 'imageScanFindings.findingSeverityCounts' \
                 --output json
             """,
@@ -155,13 +156,13 @@ pipeline {
           if (high > 0 || critical > 0) {
             totalHighCritical += (high + critical)
 
-            // Capture a concise list of offending CVEs
+            // Capture concise list of HIGH/CRITICAL findings
             def findingsText = sh(
               script: """
                 aws ecr describe-image-scan-findings \
                   --repository-name ${repo} \
                   --image-id imageDigest=${d} \
-                  --region ${REGION} \
+                  --region ${reg} \
                   --query 'imageScanFindings.findings[?severity==`HIGH` || severity==`CRITICAL`].[name,severity,attributes[?key==`package_name`].value|[0],attributes[?key==`package_version`].value|[0]]' \
                   --output json
               """,
@@ -172,23 +173,25 @@ pipeline {
           }
         }
 
+        // 4) Gate
         if (totalHighCritical > 0) {
-          echo "❌ SECURITY GATE FAILED: Found ${totalHighCritical} HIGH/CRITICAL vulnerabilities in ${repo}:${appVersion}"
+          echo "❌ SECURITY GATE FAILED: Found ${totalHighCritical} HIGH/CRITICAL vulnerabilities in ${repo}:${tag}"
           offenders.each { o ->
             echo "Digest: ${o.digest}"
             o.items.each { row ->
               // row = [CVE, severity, package_name, package_version]
-              echo " - ${row[0]} (${row[1]})  pkg=${row[2]}:${row[3]}"
+              echo " - ${row[0]} (${row[1]}) pkg=${row[2]}:${row[3]}"
             }
           }
           error("Build failed due to HIGH/CRITICAL vulnerabilities.")
         } else {
-          echo "✅ SECURITY GATE PASSED: No HIGH/CRITICAL vulnerabilities found in ${repo}:${appVersion}"
+          echo "✅ SECURITY GATE PASSED: No HIGH/CRITICAL vulnerabilities found in ${repo}:${tag}"
         }
       }
     }
   }
 }
+
 
         
     }
