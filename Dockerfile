@@ -1,10 +1,10 @@
-FROM node:20-alpine3.22 AS builder
+FROM node:22-alpine3.22 AS builder
 WORKDIR /opt/server
 COPY package.json .
 COPY *.js .
 RUN npm install
 
-FROM node:20-alpine3.22
+FROM node:22-alpine3.22
 #RUN apk update && apk upgrade --no-cache \
 RUN addgroup -S roboshop && adduser -S roboshop -G roboshop
 ENV MONGO="true" \
