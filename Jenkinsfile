@@ -68,39 +68,49 @@ pipeline {
             }
         }
         stage('Check Dependabot Alerts') {
-            environment { 
-                GITHUB_TOKEN = credentials('github-token')
+    environment {
+        GITHUB_TOKEN = credentials('github-token')
+    }
+    steps {
+        script {
+
+            def response = sh(
+                script: """
+                    curl -s \
+                      -H "Accept: application/vnd.github+json" \
+                      -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+                      https://api.github.com/repos/joindevops-1/catalogue-2/dependabot/alerts
+                """,
+                returnStdout: true
+            ).trim()
+
+            def alerts = readJSON text: response
+
+            // ✅ Filter ONLY OPEN + HIGH / CRITICAL
+            def blockingAlerts = alerts.findAll { alert ->
+                def state    = alert?.state?.toLowerCase()
+                def severity = alert?.security_advisory?.severity?.toLowerCase()
+
+                return (
+                    state == 'open' &&
+                    (severity == 'high' || severity == 'critical')
+                )
             }
-            steps {
-                script {
-                    // Fetch alerts from GitHub
-                    def response = sh(
-                        script: """
-                            curl -s -H "Accept: application/vnd.github+json" \
-                                 -H "Authorization: token ${GITHUB_TOKEN}" \
-                                 https://api.github.com/repos/joindevops-1/catalogue-2/dependabot/alerts
-                        """,
-                        returnStdout: true
-                    ).trim()
 
-                    // Parse JSON
-                    def json = readJSON text: response
+            if (blockingAlerts && blockingAlerts.size() > 0) {
+                error """
+❌ Dependabot policy violation!
 
-                    // Filter alerts by severity
-                    def criticalOrHigh = json.findAll { alert ->
-                        def severity = alert?.security_advisory?.severity?.toLowerCase()
-                        def state = alert?.state?.toLowerCase()
-                        return (state == "open" && (severity == "critical" || severity == "high"))
-                    }
-
-                    if (criticalOrHigh.size() > 0) {
-                        error "❌ Found ${criticalOrHigh.size()} HIGH/CRITICAL Dependabot alerts. Failing pipeline!"
-                    } else {
-                        echo "✅ No HIGH/CRITICAL Dependabot alerts found."
-                    }
-                }
+Found ${blockingAlerts.size()} OPEN HIGH/CRITICAL vulnerabilities.
+Fix or dismiss them before proceeding.
+"""
+            } else {
+                echo "✅ No OPEN HIGH/CRITICAL Dependabot alerts found."
             }
         }
+    }
+}
+
         stage('Build Image') {
             steps {
                 script{
