@@ -78,7 +78,7 @@ pipeline {
                         script: """
                             curl -s -H "Accept: application/vnd.github+json" \
                                  -H "Authorization: token ${GITHUB_TOKEN}" \
-                                 https://api.github.com/repos/daws-84s/catalogue/dependabot/alerts
+                                 https://api.github.com/repos/joindevops-1/catalogue-2/dependabot/alerts
                         """,
                         returnStdout: true
                     ).trim()
