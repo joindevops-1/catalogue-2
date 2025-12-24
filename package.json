@@ -18,7 +18,7 @@
     "@instana/collector": "^1.132.2",
 
 
-    "redis": "^2.8.0",
+    "redis": "^3.1.1",
     "request": "^2.88.2",
     "prom-client": "^11.5.3"
   }
