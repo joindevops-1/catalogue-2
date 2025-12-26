@@ -4,7 +4,8 @@
   "description": "product catalogue REST API",
   "main": "server.js",
   "scripts": {
-    "test": "echo \"These tests are done by developers\" "
+    "test": "jest --coverage",
+    "coverage": "jest --coverage --coverageReporters=lcov"
   },
   "author": "SteveW",
   "license": "Apache-2.0",
