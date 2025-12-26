@@ -26,10 +26,10 @@ describe('Catalogue API Endpoints', () => {
   });
 
   test('GET /products/:cat returns products in category', async () => {
-    const res = await request(app).get('/products/cat1');
-    expect(res.statusCode).toBe(200);
-    expect(res.body[0].categories).toBe('cat1');
-  });
+  const res = await request(app).get('/products/cat1');
+  expect(res.statusCode).toBe(200);
+  expect(res.body[0].categories).toBe('cat1');
+});
 
   test('GET /categories returns categories', async () => {
     const res = await request(app).get('/categories');
