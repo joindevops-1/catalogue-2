@@ -4,8 +4,8 @@
   "description": "product catalogue REST API",
   "main": "server.js",
   "scripts": {
-    "test": "jest --coverage",
-    "coverage": "jest --coverage --coverageReporters=lcov"
+    "test": "jest --coverage --forceExit",
+    "coverage": "jest --coverage --coverageReporters=lcov --forceExit"
   },
   "author": "SteveW",
   "license": "Apache-2.0",
