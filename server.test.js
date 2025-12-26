@@ -2,13 +2,15 @@
 jest.mock('mongodb'); // use __mocks__/mongodb.js
 
 const request = require('supertest');
-const app = require('./server');
+// Import both app and helper to toggle mongoConnected
+const { app, setMongoConnected } = require('./server');
 
 describe('Catalogue API Endpoints', () => {
   test('GET /health returns app and mongo status', async () => {
     const res = await request(app).get('/health');
     expect(res.statusCode).toBe(200);
     expect(res.body).toHaveProperty('app', 'OK');
+    expect(res.body).toHaveProperty('mongo');
   });
 
   test('GET /products returns product list', async () => {
@@ -26,7 +28,7 @@ describe('Catalogue API Endpoints', () => {
   test('GET /products/:cat returns products in category', async () => {
     const res = await request(app).get('/products/cat1');
     expect(res.statusCode).toBe(200);
-    expect(res.body[0].sku).toBe('123');
+    expect(res.body[0].categories).toBe('cat1');
   });
 
   test('GET /categories returns categories', async () => {
@@ -41,13 +43,15 @@ describe('Catalogue API Endpoints', () => {
     expect(res.body[0].name).toBe('Mock Product');
   });
 
+  // ❌ Error branch when mongoConnected = false
   test('GET /products returns 500 when DB not connected', async () => {
-    app.locals.mongoConnected = false;
+    setMongoConnected(false); // toggle actual flag
     const res = await request(app).get('/products');
     expect(res.statusCode).toBe(500);
-    app.locals.mongoConnected = true;
+    setMongoConnected(true); // reset
   });
 
+  // ✅ Delay branch
   test('GET /product/:sku respects GO_SLOW delay', async () => {
     process.env.GO_SLOW = 50;
     const res = await request(app).get('/product/123');
@@ -56,7 +60,7 @@ describe('Catalogue API Endpoints', () => {
   });
 });
 
-// Cover mongoConnect failure branch
+// ✅ Cover mongoConnect failure branch
 jest.resetModules();
 jest.doMock('mongodb', () => ({
   MongoClient: {
@@ -66,10 +70,11 @@ jest.doMock('mongodb', () => ({
 }));
 
 test('mongoConnect handles connection failure', async () => {
-  const app = require('./server');
+  const { app } = require('./server');
   expect(app).toBeDefined();
 });
 
+// Cleanup timers
 afterAll(() => {
   jest.clearAllTimers();
 });

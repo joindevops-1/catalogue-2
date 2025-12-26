@@ -170,4 +170,6 @@ function mongoLoop() {
 mongoLoop();
 
 // ✅ Export app for tests
-module.exports = app;
+//module.exports = app;
+
+module.exports = { app, setMongoConnected: (val) => { mongoConnected = val; } };

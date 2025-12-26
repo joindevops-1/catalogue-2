@@ -3,7 +3,12 @@ module.exports = {
     connect: jest.fn().mockResolvedValue({
       db: () => ({
         collection: () => ({
-          find: () => ({ toArray: () => Promise.resolve([{ sku: '123', name: 'Mock Product' }]) }),
+          find: (query) => {
+            if (query && query.categories) {
+              return { toArray: () => Promise.resolve([{ sku: '123', categories: query.categories }]) };
+            }
+            return { toArray: () => Promise.resolve([{ sku: '123', name: 'Mock Product' }]) };
+          },
           findOne: () => Promise.resolve({ sku: '123', name: 'Mock Product' }),
           distinct: () => Promise.resolve(['cat1', 'cat2'])
         })
