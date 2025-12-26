@@ -1,4 +1,3 @@
-// __mocks__/mongodb.js
 module.exports = {
   MongoClient: {
     connect: jest.fn().mockResolvedValue({
