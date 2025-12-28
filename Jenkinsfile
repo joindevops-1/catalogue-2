@@ -5,7 +5,7 @@ def configMap = [
     component: "catalogue"
 ]
 
-if( env.BRANCH_NAME.equalsIgnoreCase('main') ){ // if not equals to main
+if( ! env.BRANCH_NAME.equalsIgnoreCase('main') ){ // if not equals to main
     nodeJSPipeline(configMap) // by default it will call, call function inside this pipeline
 }
 else{
